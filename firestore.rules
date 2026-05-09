@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    // --- Validation Blueprints ---
+
+    function isValidUser(data) {
+      return data.uid == request.auth.uid 
+        && data.email is string && data.email.size() < 256
+        && (data.displayName == null || (data.displayName is string && data.displayName.size() <= 100))
+        && data.keys().hasAll(['uid', 'email'])
+        && data.keys().size() <= 10; // Allowing for some flexibility like photoURL, createdAt
+    }
+
+    function isValidPlaylist(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.ownerId == request.auth.uid
+        && data.songIds is list && data.songIds.size() <= 500
+        && (data.songIds.size() == 0 || data.songIds[0] is string)
+        && data.isPublic is bool
+        && data.isCollaborative is bool
+        && data.keys().hasAll(['name', 'ownerId', 'songIds', 'isPublic', 'isCollaborative']);
+    }
+
+    function isValidLikedSong(data) {
+      return data.userId == request.auth.uid
+        && data.songId is string && data.songId.size() <= 128
+        && data.likedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    // Users
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isOwner(userId) && isEmailVerified() && isValidUser(incoming());
+      allow update: if isOwner(userId) 
+        && isValidUser(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']);
+    }
+
+    // Playlists
+    match /playlists/{playlistId} {
+      allow get: if isSignedIn() && (existing().isPublic || existing().ownerId == request.auth.uid || (existing().isCollaborative && request.auth.uid in existing().collaborators));
+      allow list: if isSignedIn() && (resource.data.isPublic || resource.data.ownerId == request.auth.uid);
+      
+      allow create: if isSignedIn() && isEmailVerified() && isValidPlaylist(incoming()) && isValidId(playlistId);
+      
+      allow update: if isSignedIn() && (
+        // Action: Edit Metadata (Owner only)
+        (isOwner(existing().ownerId) && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'coverUrl', 'isPublic', 'isCollaborative', 'updatedAt'])) ||
+        // Action: Manage Songs (Owner or Collaborator)
+        ((isOwner(existing().ownerId) || (existing().isCollaborative && request.auth.uid in existing().collaborators)) && incoming().diff(existing()).affectedKeys().hasOnly(['songIds', 'updatedAt']))
+      ) && isValidPlaylist(incoming());
+      
+      allow delete: if isOwner(existing().ownerId);
+    }
+
+    // Songs (Read Only for public)
+    match /songs/{songId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Only system/admin (via admin SDK if needed)
+    }
+
+    // Liked Songs
+    match /users/{userId}/likedSongs/{likedSongId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidLikedSong(incoming()) && isValidId(likedSongId);
+      allow delete: if isOwner(userId);
+    }
+  }
+}

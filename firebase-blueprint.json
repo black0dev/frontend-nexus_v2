@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile and settings information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Playlist": {
+      "title": "Playlist",
+      "description": "User created or collaborative playlists",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "songIds": { "type": "array", "items": { "type": "string" } },
+        "coverUrl": { "type": "string" },
+        "isCollaborative": { "type": "boolean" },
+        "collaborators": { "type": "array", "items": { "type": "string" } },
+        "isPublic": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "ownerId", "songIds"]
+    },
+    "Song": {
+      "title": "Song",
+      "description": "Metadata for tracks in the library",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "artist": { "type": "string" },
+        "album": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "audioUrl": { "type": "string" },
+        "duration": { "type": "number" },
+        "genre": { "type": "string" }
+      },
+      "required": ["title", "artist", "audioUrl"]
+    },
+    "LikedSong": {
+      "title": "Liked Song",
+      "description": "Reference to a song liked by a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "songId": { "type": "string" },
+        "likedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "songId", "likedAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User documents"
+    },
+    "playlists/{playlistId}": {
+      "schema": "Playlist",
+      "description": "Collection of playlists"
+    },
+    "songs/{songId}": {
+      "schema": "Song",
+      "description": "Central catalog of songs"
+    },
+    "users/{userId}/likedSongs/{likedSongId}": {
+      "schema": "LikedSong",
+      "description": "Subcollection for songs liked by a user"
+    }
+  }
+}
